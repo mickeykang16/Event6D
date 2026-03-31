@@ -7,7 +7,7 @@ KAIST &nbsp;|&nbsp; NVIDIA
 \* Equal contribution
 
 [![CVPR 2026](https://img.shields.io/badge/CVPR-2026-blue.svg)]()
-[![arXiv](https://img.shields.io/badge/arXiv-paper-b31b1b.svg)]()
+[![arXiv](https://img.shields.io/badge/arXiv-paper-b31b1b.svg)](https://arxiv.org/abs/2603.28045)
 
 ![Demo](demo.gif)
 
