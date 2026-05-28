@@ -1,0 +1,80 @@
+# torch==2.1.1+cu118
+# torchvision==0.16.1+cu118
+# pip install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 --index-url https://download.pytorch.org/whl/cu118
+# pip install cython
+# pip install "setuptools<=58.0.4"
+# apt-get install -y wget bzip2 ca-certificates curl git vim tmux g++ gcc build-essential cmake checkinstall gfortran libeigen3-dev libjpeg8-dev libtiff5-dev pkg-config yasm libavcodec-dev libavformat-dev libswscale-dev libdc1394-22-dev libxine2-dev libv4l-dev qt5-default libgtk2.0-dev libtbb-dev libatlas-base-dev libfaac-dev libmp3lame-dev libtheora-dev libvorbis-dev libxvidcore-dev libopencore-amrnb-dev libopencore-amrwb-dev x264 v4l-utils libprotobuf-dev protobuf-compiler libgoogle-glog-dev libgflags-dev libgphoto2-dev libhdf5-dev doxygen libflann-dev libboost-all-dev proj-data libproj-dev libyaml-cpp-dev cmake-curses-gui libzmq3-dev freeglut3-dev
+# pip install --no-index --no-cache-dir pytorch3d -f https://dl.fbaipublicfiles.com/pytorch3d/packaging/wheels/py39_cu118_pyt211/download.html
+
+xformers==0.0.23
+omegaconf==2.3.0
+pytorch-lightning
+pyrender==0.1.45
+pyOpenGL>=3.1.0
+pyOpenGL_accelerate>=3.1.0
+fvcore==0.1.5.post20221221
+scikit-learn==1.4.1.post1
+scikit-image==0.22.0
+
+imageio==2.34.0
+imageio[ffmpeg]
+opencv-python==4.9.0.80
+opencv-contrib-python==4.9.0.80
+plotly==5.20.0
+open3d==0.18.0
+pyglet==1.5.28
+pysdf==0.1.9
+transformations==2024.6.1
+warp-lang==1.0.2
+torchnet==0.0.4
+webdataset==0.2.86
+pypng==0.20220715.0
+numba==0.59.1
+pybind11==2.12.0
+
+# Trimesh
+trimesh==4.2.2
+xatlas==0.0.9
+rtree==1.2.0
+
+absl-py
+jax
+mediapy
+wandb
+numpy
+scipy
+ffmpeg
+hydra-colorlog
+hydra-core
+gdown
+# pyembree  # optional, skip due to setup.py bug
+pandas
+iopath
+ruamel.yaml
+pycocotools
+matplotlib
+onnx
+onnxruntime
+openpyxl
+seaborn
+pyyaml
+videoio
+kornia
+einops
+pybind11
+joblib
+ultralytics
+GPUtil
+colorama
+Panda3D
+simplejson
+bokeh
+roma
+pin
+ninja
+h5py
+g4f
+transforms3d
+
+pycolmap
+pyceres

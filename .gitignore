@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+
+# Build artifacts
+build/
+*.bin
+
+# Local data, weights, run outputs
+data/
+weights/
+save/
+outputs/
+workspace/
+
+# Cache directories (event voxels, etc.)
+*_cache/
+
+# Logs
+*.log
+
+# Editor
+.vscode/
+.idea/
