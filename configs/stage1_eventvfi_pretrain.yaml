@@ -1,0 +1,66 @@
+train_dataset:
+  dataset:
+    name: blender-train-wo-mask-recon-single
+    args:
+      root_path: ./data/Event6DBlender/EvBlenderProc
+      repeat: 20
+      cache: in_memory
+      mode: train
+  wrapper:
+    name: blender-e2vid-resize
+    args:
+      inp_size: 48
+      scale_max: 4
+      augment: true
+      sample_q: 2304
+  batch_size: 4
+
+
+val_dataset:
+  dataset:
+    name: blender-train-wo-mask-recon-single
+    args:
+      root_path: ./data/Event6DBlender/EvBlenderProc
+      first_k: 10
+      repeat: 160
+      cache: in_memory
+      mode: test
+  wrapper:
+    name: blender-e2vid-test
+    args:
+      inp_size: 48
+      scale_max: 4
+      sample_q: 2304
+  batch_size: 1
+  
+data_norm:
+  inp: {sub: [1.0], div: [1.0]}
+  gt: {sub: [1.0], div: [1.0]}
+
+model:
+  name: cbmnet_light_extrapolation_small_e2vid
+  args:
+    encoder_spec:
+      name: edsr-baseline
+      args:
+        no_upsampling: true
+    imnet_spec:
+      name: mlp
+      args:
+        out_dim: 1
+        hidden_list: [256, 256, 256, 256]
+    in_ch: 1
+
+optimizer:
+  name: adam
+  args:
+    lr: 1.e-4
+epoch_max: 1000
+multi_step_lr:
+  milestones: [100, 150, 200, 220, 240, 260]
+  gamma: 0.5
+epoch_val: 1000
+epoch_save: 1
+
+
+#resume: save/blender-small-e2vid-detach-resize/epoch-last.pth

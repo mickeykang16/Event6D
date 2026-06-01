@@ -67,9 +67,19 @@ Event6D/
 │       ├── config.yml
 │       └── model.pth
 ├── data/
-│   ├── Event6D/        # real-world capture
-│   └── EventHO3D/      # HO3D-v2 event augmentation + your HO3D-v2 download
-└── ...
+│   ├── Event6D/         # real-world capture (eval)
+│   ├── EventHO3D/       # HO3D-v2 augmentation (eval) + your HO3D-v2 download
+│   └── Event6DBlender/  # synthetic Blender data (Stage 1 training, optional)
+├── configs/
+│   └── stage1_eventvfi_pretrain.yaml
+├── src/
+│   ├── depth_extrapolation/   # depth-extrapolation model + Stage 1 datasets
+│   ├── e2vid/                 # E2VID upstream (UZH-RPG)
+│   ├── refiner/               # FoundationPose refiner (eval-time)
+│   └── dataloader/            # eval-time dataloaders
+├── run_event6d_tracking.py
+├── run_eventho3d_tracking.py
+└── train_stage1_pretrain.py
 ```
 
 ## Evaluation
@@ -114,17 +124,46 @@ Per-run metrics are written to `outputs/<name>/0_eval_metric/`:
 > The dataloader caches voxel grids / E2VID inputs on the first run (see
 > [Disk-space note](#disk-space-note-event-caches) below). Subsequent runs reuse them.
 
-## Training data (Blender)
+## Disk-space note (event caches)
+
+The dataloader caches voxel grids alongside the raw events on first use. Expect roughly:
+
+| Where | Approx. extra disk |
+|---|---|
+| Event6D (eval) | ≈15 GB |
+| EventHO3D (eval) | ≈7 GB |
+| Event6DBlender (Stage 1 training) | ≈120 GB |
+
+## Training
+
+The released `weights/depth_extrapolation.pth` is produced by a 2-stage recipe:
+
+```
+[Blender synthetic data]
+       │
+       ▼
+Stage 1 — EventVFI pretraining
+   single-task L1 depth loss on the small depth-extrapolation model
+       │ save/<name>/epoch-{N}.pth
+       ▼
+Stage 2 — End-to-end refinement (coming soon)
+   pose + depth + recon (LPIPS) losses jointly, refiner + depth + e2vid
+       │
+       ▼
+   weights/depth_extrapolation.pth
+```
+
+### Training data (Blender)
 
 The released `depth_extrapolation.pth` checkpoint was trained on Blender-rendered
 sequences with Google Scanned Objects:
 
 ```bash
-# Primary (easy subset, ≈255 GB) — what the released checkpoint actually consumed
+# easy subset (≈255 GB)
 huggingface-cli download mickeykang/Event6DBlender --repo-type dataset \
     --local-dir ./data/Event6DBlender
 
-# Optional extension (medium subset, ≈483 GB) — extra sequences, not used yet
+# medium subset (≈483 GB)
 huggingface-cli download mickeykang/Event6DBlenderMedium --repo-type dataset \
     --local-dir ./data/Event6DBlender
 ```
@@ -135,32 +174,51 @@ Both downloads merge into a single tree:
 - `EvBlenderProc/{easy,medium}_9/` — RGB + depth + meta
 - `EvBlenderProcEv/{easy,medium}_9/` — raw event NPZ
 
-For reproduction only the `easy` subset (≈255 GB) is required — the training dataloader
-hardcodes `categories=['easy']`.
+Both `easy` and `medium` subsets are used for training (the split is defined by
+`train.txt`), so both downloads are required for reproduction.
 
-## Disk-space note (event caches)
+### Stage 1 — EventVFI pretraining (depth-extrapolation only)
 
-The first time you run **either** evaluation or training, the dataloader materializes
-voxel-grid + E2VID-input caches alongside the raw events. Expect roughly:
+Trains the small (~311 K-param) `cbmnet_light_extrapolation_small_e2vid` depth model on
+Blender synthetic depth with L1 supervision; E2VID is held frozen. Single-GPU.
 
-| Where | Approx. extra disk |
-|---|---|
-| Event6D real-world (`./data/Event6D/<seq>/<run>/parsed_voxel_*`, `parsed_e2vid*`) | ≈1 GB per sequence, ≈15 GB total (14 sequences) |
-| EventHO3D (`./data/EventHO3D/evaluation_voxel_*`) | ≈0.5 GB per sequence, ≈7 GB total (13 sequences) |
-| Event6DBlender training (`./data/Event6DBlender/EvBlenderProcEv_cache/`) | ≈90 GB across the full split |
+```bash
+python train_stage1_pretrain.py \
+    --config configs/stage1_eventvfi_pretrain.yaml \
+    --name stage1_v1 --gpu 0
+```
 
-## Training code
+Checkpoints are saved to `save/stage1_v1/epoch-{N}.pth`. Pass one as `--eventvfi_ckpt`
+to Stage 2 (below) when it is released.
 
-**Coming soon** — the end-to-end training pipeline (refiner + depth-extrapolation +
-E2VID) is being prepared for public release. For now this repository contains evaluation
-code only.
+### Stage 2 — End-to-end refinement
+
+**Coming soon** — joins refiner + depth-extrapolation + e2vid decoder with pose + depth
 
 ## Acknowledgements
 
-This work builds on:
-- [FoundationPose](https://github.com/NVlabs/FoundationPose) — pose refiner backbone
-- [E2VID](https://github.com/uzh-rpg/rpg_e2vid) — event-to-video reconstruction
-- [CBMNet](https://github.com/intelpro/CBMNet) — cross-modal bilateral mutual network used in our depth-extrapolation stage
+```
+@inproceedings{wen2024foundationpose,
+  title     = {FoundationPose: Unified 6D Pose Estimation and Tracking of Novel Objects},
+  author    = {Wen, Bowen and Yang, Wei and Kautz, Jan and Birchfield, Stan},
+  booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year      = {2024}
+}
+
+@article{rebecq2019high,
+  title   = {High Speed and High Dynamic Range Video with an Event Camera},
+  author  = {Rebecq, Henri and Ranftl, Ren{\'e} and Koltun, Vladlen and Scaramuzza, Davide},
+  journal = {IEEE Transactions on Pattern Analysis and Machine Intelligence (T-PAMI)},
+  year    = {2019}
+}
+
+@inproceedings{kim2023event,
+  title     = {Event-based Video Frame Interpolation with Cross-Modal Asymmetric Bidirectional Motion Fields},
+  author    = {Kim, Taewoo and Chae, Yujeong and Jang, Hyun-Kurl and Yoon, Kuk-Jin},
+  booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year      = {2023}
+}
+```
 
 ## Cite this work📝
 
