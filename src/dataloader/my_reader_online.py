@@ -12,8 +12,7 @@ import numpy as np
 import ruamel.yaml
 # import yaml
 
-sys.path.insert(0, '/mnt5/HO3D/EventVFI')
-from datasets.representations_og import ReconVoxelGrid
+from .representations_og import ReconVoxelGrid
 import torch
 
 from bop_toolkit_lib.misc import calc_pts_diameter

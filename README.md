@@ -71,15 +71,18 @@ Event6D/
 │   ├── EventHO3D/       # HO3D-v2 augmentation (eval) + your HO3D-v2 download
 │   └── Event6DBlender/  # synthetic Blender data (Stage 1 training, optional)
 ├── configs/
-│   └── stage1_eventvfi_pretrain.yaml
+│   ├── stage1_pretrain.yaml
+│   └── blender/fp_refine_final.yaml   # Stage 2 config
 ├── src/
 │   ├── depth_extrapolation/   # depth-extrapolation model + Stage 1 datasets
 │   ├── e2vid/                 # E2VID upstream (UZH-RPG)
-│   ├── refiner/               # FoundationPose refiner (eval-time)
-│   └── dataloader/            # eval-time dataloaders
+│   ├── refiner/               # FoundationPose refiner
+│   ├── dataloader/            # eval + Stage 2 dataloaders
+│   └── utils/                 # Stage 2 training utilities
 ├── run_event6d_tracking.py
 ├── run_eventho3d_tracking.py
-└── train_stage1_pretrain.py
+├── train_stage1_pretrain.py
+└── train_refiner_ddp_e2e.py   # Stage 2
 ```
 
 ## Evaluation
@@ -142,12 +145,12 @@ The released `weights/depth_extrapolation.pth` is produced by a 2-stage recipe:
 [Blender synthetic data]
        │
        ▼
-Stage 1 — EventVFI pretraining
+Stage 1 — Depth pretraining
    single-task L1 depth loss on the small depth-extrapolation model
        │ save/<name>/epoch-{N}.pth
        ▼
-Stage 2 — End-to-end refinement (coming soon)
-   pose + depth + recon (LPIPS) losses jointly, refiner + depth + e2vid
+Stage 2 — End-to-end refinement
+   pose + depth + recon losses jointly, refiner + depth + e2vid
        │
        ▼
    weights/depth_extrapolation.pth
@@ -177,23 +180,36 @@ Both downloads merge into a single tree:
 Both `easy` and `medium` subsets are used for training (the split is defined by
 `train.txt`), so both downloads are required for reproduction.
 
-### Stage 1 — EventVFI pretraining (depth-extrapolation only)
+### Stage 1 — Depth pretraining
 
 Trains the small (~311 K-param) `cbmnet_light_extrapolation_small_e2vid` depth model on
 Blender synthetic depth with L1 supervision; E2VID is held frozen. Single-GPU.
 
 ```bash
 python train_stage1_pretrain.py \
-    --config configs/stage1_eventvfi_pretrain.yaml \
+    --config configs/stage1_pretrain.yaml \
     --name stage1_v1 --gpu 0
 ```
 
-Checkpoints are saved to `save/stage1_v1/epoch-{N}.pth`. Pass one as `--eventvfi_ckpt`
-to Stage 2 (below) when it is released.
+Checkpoints are saved to `save/stage1_v1/epoch-{N}.pth`. Pass one as `--depth_extrapolation_ckpt`
+to Stage 2 (below).
 
 ### Stage 2 — End-to-end refinement
 
-**Coming soon** — joins refiner + depth-extrapolation + e2vid decoder with pose + depth
+End-to-end fine-tunes the depth model, refiner, and E2VID decoder jointly under pose and
+depth/reconstruction losses. Only the refined depth model is kept for inference. 2-GPU DDP.
+
+```bash
+torchrun --standalone --nproc_per_node=2 train_refiner_ddp_e2e.py \
+    --name stage2_v1 \
+    --config configs/blender/fp_refine_final.yaml \
+    --load_from weights/foundationpose_refiner/model.pth \
+    --depth_extrapolation_ckpt save/stage1_v1/epoch-20.pth \
+    --e2vid_ckpt weights/e2vid.pth.tar
+```
+
+Checkpoints are saved every 100 iterations to `save/stage2_v1/model/`; the released
+`weights/depth_extrapolation.pth` is one of these.
 
 ## Acknowledgements
 

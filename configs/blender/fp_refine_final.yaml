@@ -1,0 +1,36 @@
+train:
+  epochs: 10
+  batch_size: 8
+  lr: 1e-5
+
+  scheduler:
+    type: cosine_warmup
+    warmup:
+      ratio: 0.05   # 전체 스텝의 5% warmup
+    min_lr_ratio: 0.01
+
+model:
+  augment:
+    # trans: from_mesh # from_mesh or 0.05
+    trans: 0.05 # from_mesh or 0.05
+    rot: 10.0
+  loss:
+    trans:
+      weight: 1.0
+      type: mse
+    rot:
+      weight: 1.0
+      type: mse
+    recon_weight: 0.01
+
+dataset:
+  name: blender6d_e2e
+  root_dir: ./data/Event6DBlender/EvBlenderProc
+  event_root_dir: ./data/Event6DBlender/EvBlenderProcEv
+  split: train
+  window_size: 4
+  stride: 1
+  step_size: 4
+  max_cache_size: 0
+  event_cache_dir: ./data/Event6DBlender/EvBlenderProcWindowDepth
+  return_tensor: True
