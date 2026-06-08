@@ -221,6 +221,13 @@ Checkpoints are saved every 100 iterations to `save/stage2_v1/model/`; the relea
   year      = {2024}
 }
 
+@article{denninger2019blenderproc,
+  title={Blenderproc},
+  author={Denninger, Maximilian and Sundermeyer, Martin and Winkelbauer, Dominik and Zidan, Youssef and Olefir, Dmitry and Elbadrawy, Mohamad and Lodhi, Ahsan and Katam, Harinandan},
+  journal={arXiv preprint arXiv:1911.01911},
+  year={2019}
+}
+
 @article{rebecq2019high,
   title   = {High Speed and High Dynamic Range Video with an Event Camera},
   author  = {Rebecq, Henri and Ranftl, Ren{\'e} and Koltun, Vladlen and Scaramuzza, Davide},
@@ -234,6 +241,14 @@ Checkpoints are saved every 100 iterations to `save/stage2_v1/model/`; the relea
   booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
   year      = {2023}
 }
+
+@inproceedings{cho2024dense,
+  title={Dense hand-object (ho) graspnet with full grasping taxonomy and dynamics},
+  author={Cho, Woojin and Lee, Jihyun and Yi, Minjae and Kim, Minje and Woo, Taeyun and Kim, Donghwan and Ha, Taewook and Lee, Hyokeun and Ryu, Je-Hwan and Woo, Woontack and others},
+  booktitle={European Conference on Computer Vision (ECCV)},
+  year={2024},
+}
+
 ```
 
 ## Cite this work📝
