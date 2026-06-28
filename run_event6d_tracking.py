@@ -193,7 +193,7 @@ def tracking(args):
                     start_depth = cv2.resize(start_depth, (ev_w, ev_h), interpolation=cv2.INTER_LINEAR)
 
             metrics = []
-            for j in range(4):
+            for j in range(1 if args.rgbd_baseline else 4):
                 gt_pose = reader.get_gt_pose(i, j, frame='event' if args.e2vid else 'rgb')
                 if gt_pose is None:
                     continue
@@ -311,6 +311,9 @@ def parse_args():
                         help='FoundationPose refiner checkpoint')
     parser.add_argument('--e2vid', action='store_true', default=False,
                         help='Use event-camera intrinsics + E2VID images')
+    parser.add_argument('--rgbd_baseline', action='store_true', default=False,
+                        help='Vanilla FoundationPose RGB-D baseline: one refinement per RGB '
+                             'frame at the RGB rate (no events / E2VID / depth extrapolation)')
     parser.add_argument('--eval_fps', type=int, default=30, choices=[30, 120],
                         help='Evaluate at 30 fps (RGB rate) or 120 fps (per sub-timestep)')
     parser.add_argument('--viz_step', type=int, default=1, help='Save visualizations every N frames')
