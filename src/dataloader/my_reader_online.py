@@ -222,6 +222,8 @@ class Event6DReader:
         K1, D1, _, _ = parse_cam0_from_kalibr(calib_file, cam0_key="cam1")
         self.K = K
         self.K1 = K1
+        self.D = D      # radtan distortion of the RGB camera
+        self.D1 = D1    # radtan distortion of the event camera (events are raw, not undistorted)
 
         with open(calib_file, "r") as f:
             y = yaml.load(f)

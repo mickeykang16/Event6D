@@ -243,6 +243,7 @@ def tracking(args):
                         color=color, gt_mesh=gt_mesh, K=K, gt_pose=gt_pose, pred_pose=pred_pose,
                         metric=metric, obj_f=obj_name, frame_idx=i, save_path=save_eval_path,
                         glctx=glctx, name=f'{len(reader.color_files)}_{args.name}',
+                        dist_coeffs=reader.D1 if args.e2vid else reader.D,
                     )
                     if args.online and vis_img is not None:
                         vis_path = os.path.join(save_eval_path,

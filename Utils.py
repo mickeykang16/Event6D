@@ -728,14 +728,31 @@ def trimesh_add_pure_colored_texture(mesh, color=np.array([255,255,255]), resolu
   mesh.visual = trimesh.visual.texture.TextureVisuals(uv=mesh.visual.uv,image=Image.fromarray(tex_img))
   return mesh
 
-def project_3d_to_2d(pt,K,ob_in_cam):
+def project_3d_to_2d(pt,K,ob_in_cam,dist_coeffs=None):
   pt = pt.reshape(4,1)
+  if dist_coeffs is not None:
+    # Project through the lens model so the point lands on the raw (distorted) image
+    pt_cam = (ob_in_cam@pt)[:3,0].reshape(1,1,3).astype(np.float64)
+    uv,_ = cv2.projectPoints(pt_cam, np.zeros(3), np.zeros(3), K.astype(np.float64), np.asarray(dist_coeffs,dtype=np.float64))
+    return uv.reshape(-1)[:2].round().astype(int)
   projected = K @ ((ob_in_cam@pt)[:3,:])
   projected = projected.reshape(-1)
   projected = projected/projected[2]
   return projected.reshape(-1)[:2].round().astype(int)
 
-def draw_xyz_axis(color, ob_in_cam, scale=0.1, K=np.eye(3), thickness=3, transparency=0,is_input_rgb=False):
+def distort_mask(mask, K, dist_coeffs):
+  '''Warp a mask rendered with pinhole K into the raw (distorted) image of the same camera.
+  For every distorted pixel, look up where it lands in the undistorted (rendered) image.
+  '''
+  H,W = mask.shape[:2]
+  uu,vv = np.meshgrid(np.arange(W,dtype=np.float32), np.arange(H,dtype=np.float32))
+  pts = np.stack([uu,vv],axis=-1).reshape(-1,1,2)
+  und = cv2.undistortPoints(pts, K.astype(np.float64), np.asarray(dist_coeffs,dtype=np.float64), P=K.astype(np.float64))
+  und = und.reshape(H,W,2).astype(np.float32)
+  out = cv2.remap(mask.astype(np.uint8), und[...,0], und[...,1], interpolation=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+  return out.astype(mask.dtype)
+
+def draw_xyz_axis(color, ob_in_cam, scale=0.1, K=np.eye(3), thickness=3, transparency=0,is_input_rgb=False,dist_coeffs=None):
   '''
   @color: BGR
   '''
@@ -747,10 +764,10 @@ def draw_xyz_axis(color, ob_in_cam, scale=0.1, K=np.eye(3), thickness=3, transpa
   xx[:3] = xx[:3]*scale
   yy[:3] = yy[:3]*scale
   zz[:3] = zz[:3]*scale
-  origin = tuple(project_3d_to_2d(np.array([0,0,0,1]), K, ob_in_cam))
-  xx = tuple(project_3d_to_2d(xx, K, ob_in_cam))
-  yy = tuple(project_3d_to_2d(yy, K, ob_in_cam))
-  zz = tuple(project_3d_to_2d(zz, K, ob_in_cam))
+  origin = tuple(project_3d_to_2d(np.array([0,0,0,1]), K, ob_in_cam, dist_coeffs))
+  xx = tuple(project_3d_to_2d(xx, K, ob_in_cam, dist_coeffs))
+  yy = tuple(project_3d_to_2d(yy, K, ob_in_cam, dist_coeffs))
+  zz = tuple(project_3d_to_2d(zz, K, ob_in_cam, dist_coeffs))
   line_type = cv2.LINE_AA
   arrow_len = 0
   tmp = color.copy()
@@ -1431,7 +1448,7 @@ def vis_mask_contours(image: np.ndarray, mask: np.ndarray, color: Tuple[int, int
 
     return cv2.drawContours(image, contours, -1, color, thickness, cv2.LINE_AA)
 
-def visualize_frame_results_gt(color, gt_mesh, K, gt_pose, pred_pose, obj_f, frame_idx, save_path, glctx, metric=None, name=None, est_mesh=None, save_on_folder=False,nocs_metric=False):
+def visualize_frame_results_gt(color, gt_mesh, K, gt_pose, pred_pose, obj_f, frame_idx, save_path, glctx, metric=None, name=None, est_mesh=None, save_on_folder=False,nocs_metric=False, dist_coeffs=None):
     """
     Visualize results for a single frame
 
@@ -1450,6 +1467,9 @@ def visualize_frame_results_gt(color, gt_mesh, K, gt_pose, pred_pose, obj_f, fra
         name: Name identifier for saving
         mesh_index: Mesh index for display
         init: Initialization flag for display
+        dist_coeffs: Lens distortion of the camera that captured `color` (radtan k1,k2,p1,p2).
+            The renderer is pinhole-only, so when given, the rendered masks and axes are
+            warped into the raw image so the overlay lines up with the distorted frame.
     """
     H, W = color.shape[:2]
 
@@ -1477,10 +1497,12 @@ def visualize_frame_results_gt(color, gt_mesh, K, gt_pose, pred_pose, obj_f, fra
     gt_img = (gt_img[0] * 255.0).detach().cpu().numpy().astype(np.uint8)
     gt_depth = gt_depth[0].detach().cpu().numpy()
     gt_mask = (gt_depth > 0).astype(np.bool_)
+    if dist_coeffs is not None:
+        gt_mask = distort_mask(gt_mask, K, dist_coeffs)
 
     gt_color = vis_mask_contours(color.copy(), gt_mask, color=(255, 1, 154))
     # vis_color = vis_mask_contours(vis_color, ren_mask)
-    gt_color = draw_xyz_axis(gt_color, ob_in_cam=gt_pose, scale=0.1, K=K, thickness=3, transparency=0, is_input_rgb=True)
+    gt_color = draw_xyz_axis(gt_color, ob_in_cam=gt_pose, scale=0.1, K=K, thickness=3, transparency=0, is_input_rgb=True, dist_coeffs=dist_coeffs)
     cv2.putText(gt_color, 'GT Pose', (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 153, 0), 2, cv2.LINE_AA)
 
     # imageio.imwrite(os.path.join(vis_path, f"{obj_f}_gt_img_{frame_idx:05d}.png"), gt_color)
@@ -1503,11 +1525,13 @@ def visualize_frame_results_gt(color, gt_mesh, K, gt_pose, pred_pose, obj_f, fra
     ren_img = (ren_img[0] * 255.0).detach().cpu().numpy().astype(np.uint8)
     ren_depth = ren_depth[0].detach().cpu().numpy()
     ren_mask = (ren_depth > 0).astype(np.bool_)
+    if dist_coeffs is not None:
+        ren_mask = distort_mask(ren_mask, K, dist_coeffs)
     # ren_img = draw_xyz_axis(ren_img, ob_in_cam=pred_pose, scale=0.1, K=K, thickness=3, transparency=0, is_input_rgb=True)
 
     est_color = vis_mask_contours(color.copy(), ren_mask, color=(255, 1, 154))
     # vis_color = vis_mask_contours(vis_color, ren_mask)
-    est_color = draw_xyz_axis(est_color, ob_in_cam=pred_pose, scale=0.1, K=K, thickness=3, transparency=0, is_input_rgb=True)
+    est_color = draw_xyz_axis(est_color, ob_in_cam=pred_pose, scale=0.1, K=K, thickness=3, transparency=0, is_input_rgb=True, dist_coeffs=dist_coeffs)
 
     cv2.putText(est_color, 'EST Pose', (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 153, 0), 2, cv2.LINE_AA)
 
