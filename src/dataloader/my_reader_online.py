@@ -54,19 +54,6 @@ def inverse_T(T):
     T_inv[:-1, -1] = -R_inv @ t
     return T_inv
 
-def load_extrinsic_yaml(yaml_path: str):
-    with open(yaml_path, "r") as f:
-        data = yaml.load(f)
-
-    R = np.array(data["R"], dtype=np.float64)  # (3,3)
-    t = np.array(data["t"], dtype=np.float64).reshape(3, 1)  # (3,1)
-
-    T = np.eye(4, dtype=np.float64)
-    T[:3, :3] = R
-    T[:3, 3] = t.flatten()
-
-    return T
-
 def parse_cam0_from_kalibr(yaml_path: str, cam0_key: str = "cam0", cam1_key: str = "cam1"):
     with open(yaml_path, "r") as f:
         y = yaml.load(f)
@@ -92,16 +79,6 @@ def parse_cam0_from_kalibr(yaml_path: str, cam0_key: str = "cam0", cam1_key: str
     else:
         H = int(round(2 * float(cy))); W = int(round(2 * float(cx)))
     return K0, D0, (H, W), dist_model
-
-def pose_to_matrix(px, py, pz, qx, qy, qz, qw):
-    # SciPy expects [x, y, z, w] (same 순서)
-    r = R.from_quat([qx, qy, qz, qw])
-    Rmat = r.as_matrix()  # 3x3 rotation
-
-    T = np.eye(4, dtype=np.float64)
-    T[:3, :3] = Rmat
-    T[:3, 3] = [px, py, pz]
-    return T
 
 def warp_depth_rgb_to_event(
     depth_rgb,           # (H_rgb, W_rgb), depth in meters in RGB cam
@@ -218,8 +195,6 @@ class Event6DReader:
     def __init__(self,
                  video_dir,
                  read_all=False,
-                 load_opti_pose=False,
-                 fps=30,
                  event_depth_dir=None,
                  voxel_cache_dir=None):
         self.video_dir = video_dir
@@ -227,41 +202,27 @@ class Event6DReader:
         self.event_depth_dir = video_dir if event_depth_dir is None else event_depth_dir
 
         assert os.path.isdir(video_dir), f'Cannot find data directory {video_dir}'
-        # self.ho3d_root = '/'.join(self.video_dir.split('/')[:-2])
+
+        # Dataset root (e.g. data/Event6D): holds simple_mesh/ and 0001-camchain.yaml
+        self.dataset_root = os.path.dirname(os.path.dirname(os.path.abspath(video_dir)))
 
         with open(os.path.join(self.video_dir, 'obj.txt')) as f:
             self.obj_id = f.readline().strip()
 
-        self.mesh_root = '../EOT6D/simple_mesh'
+        self.mesh_root = os.path.join(self.dataset_root, 'simple_mesh')
         self.ho3d_root = 'data/ho3d'
-        self.fps = fps
 
-        # self.color_files = sorted(glob.glob(f"{self.video_dir}/rgb/*.jpg"))
         self.depth_files = sorted(glob.glob(f"{self.video_dir}/depth_aligned_to_color/*.png"))
         self.color_files = [file.replace('depth_aligned_to_color', 'rgb').replace('png', 'jpg') for file in self.depth_files]
 
-        # meta_file = self.color_files[0].replace('.jpg', '.pkl').replace('rgb', 'meta')
-        # self.K = pickle.load(open(meta_file, 'rb'))['camMat']
-
-        calib_file ='../EOT6D/0001-camchain.yaml'
+        calib_file = os.path.join(self.dataset_root, '0001-camchain.yaml')
+        assert os.path.isfile(calib_file), f'Cannot find calibration file {calib_file}'
 
         K, D, (H_yaml, W_yaml), dist_model = parse_cam0_from_kalibr(calib_file)
-
         K1, D1, _, _ = parse_cam0_from_kalibr(calib_file, cam0_key="cam1")
-
         self.K = K
         self.K1 = K1
 
-        # self.T_opti_to_cam = load_extrinsic_yaml('../EOT6D/calib_1014/P_feats_800.yaml')
-        # self.T_opti_to_cam1 = load_extrinsic_yaml('../EOT6D/calib_1014/P1_feats_800.yaml')
-        self.T_opti_to_cam = load_extrinsic_yaml('../EOT6D/P_feats.yaml')
-        self.T_opti_to_cam1 = load_extrinsic_yaml('../EOT6D/P1_feats.yaml')
-
-        # self.T_opti_to_cam = load_extrinsic_yaml('../EOT6D/calib_1013/P_feats.yaml')
-
-        # self.T_opti_to_cam1 = load_extrinsic_yaml('../EOT6D/calib_1013/P1_feats.yaml')
-
-        # self.rgb_to_event = self.T_opti_to_cam1 @ inverse_T(self.T_opti_to_cam)
         with open(calib_file, "r") as f:
             y = yaml.load(f)
             self.rgb_to_event = np.array(y['cam1']['T_cn_cnm1'])
@@ -275,83 +236,6 @@ class Event6DReader:
         else:
             fname = os.path.basename(mask_file)
             self.start, self.end = int(os.path.splitext(fname)[0]), -4
-
-        if load_opti_pose:
-            self.opti_pose = []
-            df = pd.read_csv(os.path.join(video_dir, 'aligned_depth_pose.csv'))
-
-            if fps == 30:
-
-                mask = ~pd.isna(df.get("depth_idx"))
-
-                rows = df[mask].copy().drop_duplicates(subset=["depth_idx"], keep="first")
-
-                for _, r in rows.iterrows():
-                    px, py, pz = float(r["px"]), float(r["py"]), float(r["pz"])
-                    qx, qy, qz, qw = float(r["qx"]), float(r["qy"]), float(r["qz"]), float(r["qw"])
-                    self.opti_pose.append(pose_to_matrix(px, py, pz, qx, qy, qz, qw))
-            elif fps == 120:
-
-                mask = ~pd.isna(df.get("depth_idx"))
-                rows = df[mask].copy().sort_index()  # 순서 유지
-
-                prev_depth_idx = None
-                buf = []  # 현재 그룹을 임시로 쌓는 버퍼
-                self.opti_pose = []  # 필요 시 초기화
-
-                def pick4_indices(n: int):
-                    """맨 뒤(n-1) 포함, 가능하면 0 제외. 길이 4로 균등 샘플."""
-                    if n <= 4:
-                        # 개수 <=4면 끝에서 최대 4개만 사용 (맨 뒤 포함)
-                        return np.arange(max(0, n - 4), n, dtype=int)
-                    # [0, n-1] 구간을 5등분한 뒤 첫 점(0)을 버리고 4개만 취함
-                    # 예: n=8 -> 등분점 [0,1.75,3.5,5.25,7] -> 첫 점 제외 -> [1.75,3.5,5.25,7] -> [1,3,5,7]
-                    return np.linspace(0, n - 1, 5, dtype=float)[1:].astype(int)
-
-                def flush_buffer(buf):
-                    """버퍼에 쌓인 rows를 길이 4로 (맨 뒤 포함, 0 회피) 균등 샘플해 pose_list로 변환"""
-                    n = len(buf)
-                    if n == 0:
-                        return None
-                    idx = pick4_indices(n)
-                    chosen = [buf[i] for i in idx]
-
-                    pose_list = []
-                    for r in chosen:
-                        px, py, pz = float(r["px"]), float(r["py"]), float(r["pz"])
-                        qx, qy, qz, qw = float(r["qx"]), float(r["qy"]), float(r["qz"]), float(r["qw"])
-                        pose_list.append(pose_to_matrix(px, py, pz, qx, qy, qz, qw))
-                    return pose_list
-
-                for _, r in rows.iterrows():
-                    cur_depth_idx = r["depth_idx"]
-
-                    if prev_depth_idx is None:
-                        # 첫 그룹 시작
-                        prev_depth_idx = cur_depth_idx
-                        buf = [r]
-                        continue
-                    if cur_depth_idx != prev_depth_idx:
-                        # ★ 변경점: depth_idx가 바뀐 '현재 r'까지 포함해서 이전 그룹 flush
-                        # buf.append(r)
-                        pose_list = flush_buffer(buf)
-                        if pose_list is not None:
-                            self.opti_pose.append(pose_list)
-                        # 새 그룹 시작: 현재 r은 이미 이전 flush에 포함되었으니 비움
-                        buf = [r]
-                        prev_depth_idx = cur_depth_idx
-                    else:
-                        # 동일 depth_idx 계속 쌓기
-                        buf.append(r)
-                # 마지막 그룹 flush
-                pose_list = flush_buffer(buf)
-                if pose_list is not None:
-                    self.opti_pose.append(pose_list)
-
-            else:
-                raise NotImplementedError
-
-            self.opti_pose = self.opti_pose[self.start:self.end+1]
 
         self.color_files = self.color_files[self.start:self.end+1]
 
@@ -644,24 +528,3 @@ class Event6DReader:
             pose = self.rgb_to_event @ pose
 
         return pose
-
-    def get_opti_pose(self, i, j=0):
-        if self.fps == 30:
-            ob_in_cam = self.T_opti_to_cam @ self.opti_pose[i]
-        else:
-            ob_in_cam = self.T_opti_to_cam @ self.opti_pose[i][j]
-        return ob_in_cam
-
-if __name__=="__main__":
-
-    reader = Event6DReader('../EOT6D/demo_0916/0000')
-    gt_mesh = reader.get_gt_mesh()
-    gt_diameter = reader.get_gt_mesh_diamter()
-    ob_id = reader.get_obj_id()
-    mask = reader.get_mask(0).astype(np.bool_)
-
-    for i in range(len(reader)):
-        color_file = reader.color_files[i]
-        reader.get_opti_pose(i)
-        reader.get_depth(i)
-        reader.K

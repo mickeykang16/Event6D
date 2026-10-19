@@ -14,7 +14,9 @@ data/
 weights/
 save/
 outputs/
-workspace/
+workspace/*
+!workspace/models_info.json
+!workspace/models_info_eot.json
 
 # Cache directories (event voxels, etc.)
 *_cache/
